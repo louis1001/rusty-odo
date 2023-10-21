@@ -7,13 +7,14 @@ use lazy_static::lazy_static;
 use super::{parser::Node, lexer::Token};
 
 pub struct SemanticAnalyzer {
-    symbol_table: SymbolTable
+    pub symbol_table: SymbolTable
 }
 
 impl SemanticAnalyzer {
     pub fn new() -> SemanticAnalyzer {
         SemanticAnalyzer {
             symbol_table: SymbolTable {
+                identifier: "global_scope".to_string(),
                 symbols: {
                     let mut map = HashMap::new();
                     // Add the primitive types to the symbol table
@@ -37,20 +38,21 @@ lazy_static! {
     static ref BOOL_TYPE: Symbol = Symbol::new("bool".to_string(), SymbolVariant::Primitive);
 }
 
-type SemanticNode = Box<SemanticAST>;
+pub type SemanticNode = Box<SemanticAst>;
 
 #[derive(Debug)]
-enum SemanticAST {
-    Block(Vec<SemanticAST>),
+pub enum SemanticAst {
+    Block(Vec<SemanticAst>),
     Number(Token),
     Variable(Token),
     // It should also store the infered type
-    Declaration(Token, Uuid, Box<SemanticAST>),
-    Assignment(Token, Box<SemanticAST>),
-    DebugPrint(Box<SemanticAST>)
+    Declaration(Token, Uuid, Box<SemanticAst>),
+    Assignment(Token, Box<SemanticAst>),
+    DebugPrint(Box<SemanticAst>)
 }
 
 pub struct SymbolTable {
+    identifier: String,
     symbols: HashMap<Uuid, Symbol>
 }
 
@@ -75,7 +77,7 @@ impl SymbolTable {
 #[derive(Clone)]
 pub struct Symbol {
     name: String,
-    symbol_id: Uuid,
+    pub symbol_id: Uuid,
     variant: SymbolVariant
 }
 
@@ -106,7 +108,7 @@ pub struct Variable {
 /// This is what is returned when a grammatical Node is analyzed
 #[derive(Debug)]
 pub struct SemanticResult {
-    node: SemanticNode,
+    pub node: SemanticNode,
     type_id: Option<Uuid>,
     // More context to be added later...
     // Does this node have side effects, for example.
@@ -131,7 +133,7 @@ impl SemanticAnalyzer {
                     semantic_nodes.push(*self.analyze_node(node)?.node);
                 }
 
-                let node = SemanticAST::Block(semantic_nodes);
+                let node = SemanticAst::Block(semantic_nodes);
 
                 Ok(SemanticResult {
                     node: Box::new(node),
@@ -139,7 +141,7 @@ impl SemanticAnalyzer {
                 })
             },
             Ast::Number(token) => {
-                let node = SemanticAST::Number(token);
+                let node = SemanticAst::Number(token);
 
                 Ok(SemanticResult {
                     node: Box::new(node),
@@ -147,10 +149,11 @@ impl SemanticAnalyzer {
                 })
             },
             Ast::Variable(token) => {
-                let node = SemanticAST::Variable(token.clone());
+                let node = SemanticAst::Variable(token.clone());
 
                 // lookup the variable and return it's type
-                let symbol = self.symbol_table.lookup(token.value).unwrap();
+                let symbol = self.symbol_table.lookup(token.value.clone())
+                    .ok_or(anyhow::anyhow!("Variable {} not found", token.value))?;
 
                 let type_id = match symbol.variant {
                     SymbolVariant::Variable(ref var) => var.type_id,
@@ -181,7 +184,7 @@ impl SemanticAnalyzer {
 
                 self.symbol_table.symbols.insert(symbol.symbol_id, symbol.clone());
 
-                let node = SemanticAST::Declaration(token, symbol.symbol_id, result_node.node);
+                let node = SemanticAst::Declaration(token, symbol.symbol_id, result_node.node);
 
                 Ok(SemanticResult {
                     node: Box::new(node),
@@ -205,7 +208,7 @@ impl SemanticAnalyzer {
                     return Err(anyhow::anyhow!("Type mismatch: Expected type {:?} but got type {:?}", type_id, result_node.type_id.unwrap()));
                 }
 
-                let node = SemanticAST::Assignment(token, result_node.node);
+                let node = SemanticAst::Assignment(token, result_node.node);
 
                 Ok(SemanticResult {
                     node: Box::new(node),
@@ -219,7 +222,7 @@ impl SemanticAnalyzer {
                 let _ = result_node.type_id.ok_or(anyhow::anyhow!("DebugPrint must be a valid expression (Must return value)"))?;
                 // Return nothing
 
-                let node = SemanticAST::DebugPrint(result_node.node);
+                let node = SemanticAst::DebugPrint(result_node.node);
 
                 Ok(SemanticResult {
                     node: Box::new(node),
