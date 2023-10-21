@@ -48,8 +48,16 @@ impl Interpreter {
 
                 Ok(ExecutionResult { value: value })
             },
+            SemanticAst::Truth(token) => {
+                let value = Value {
+                    content: ValueVariant::Primitive(PrimitiveValue::Bool(token.value.parse::<bool>()?)),
+                    uuid: Uuid::new_v4()
+                };
+
+                Ok(ExecutionResult { value: value })
+            },
             SemanticAst::Variable(token) => {
-                let symbol = self.semantic_analyzer.symbol_table.lookup(token.value).ok_or(anyhow::anyhow!("Symbol not found"))?;
+                let symbol = self.semantic_analyzer.current_scope().expect("There's always a scope").lookup(token.value).ok_or(anyhow::anyhow!("Symbol not found"))?;
 
                 let value = self.value_table.get(self.symbol_to_value[&symbol.symbol_id]).ok_or(anyhow::anyhow!("Value not found"))?;
 
@@ -60,7 +68,7 @@ impl Interpreter {
             SemanticAst::Declaration(token, _, node) => {
                 let result = self.interpret(*node)?;
 
-                let symbol = self.semantic_analyzer.symbol_table.lookup(token.value).ok_or(anyhow::anyhow!("Symbol not found"))?;
+                let symbol = self.semantic_analyzer.current_scope().expect("There's always a scope").lookup(token.value).ok_or(anyhow::anyhow!("Symbol not found"))?;
 
                 self.symbol_to_value.insert(symbol.symbol_id, result.value.uuid);
 
@@ -71,7 +79,7 @@ impl Interpreter {
             SemanticAst::Assignment(token, node) => {
                 let result = self.interpret(*node)?;
 
-                let symbol = self.semantic_analyzer.symbol_table.lookup(token.value).ok_or(anyhow::anyhow!("Symbol not found"))?;
+                let symbol = self.semantic_analyzer.current_scope().expect("There's always a scope").lookup(token.value).ok_or(anyhow::anyhow!("Symbol not found"))?;
 
                 self.symbol_to_value.insert(symbol.symbol_id, result.value.uuid);
 

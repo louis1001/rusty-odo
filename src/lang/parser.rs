@@ -39,6 +39,7 @@ pub type Node = Box<Ast>;
 pub enum Ast {
     Block(Vec<Node>),
     Number(Token),
+    Truth(Token),
     Variable(Token),
     Assignment(Token, Node),
     Declaration(Token, Node),
@@ -119,6 +120,10 @@ impl Parser {
             TokenType::Number => {
                 let token = self.tokens.next().ok_or(Error::SuddenEndOfFile)?;
                 Ok(Box::new(Ast::Number(token)))
+            },
+            TokenType::Truth => {
+                let token = self.tokens.next().ok_or(Error::SuddenEndOfFile)?;
+                Ok(Box::new(Ast::Truth(token)))
             },
             TokenType::Name => {
                 Ok(Box::new(Ast::Variable(self.tokens.next().ok_or(Error::SuddenEndOfFile)?)))

@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+
+use lazy_static::lazy_static;
+
 #[derive(Debug, Clone)]
 pub struct Token {
     pub token_type: TokenType,
@@ -12,6 +16,7 @@ pub enum TokenType {
     Var, // var a = 10.0
     Name, // a
     Number, // 10.0
+    Truth,
     Assign, // =
     DebugPrint // ':' - Temporary
 }
@@ -59,6 +64,16 @@ impl Lexer {
     }
 }
 
+lazy_static! {
+    static ref KEYWORDS: HashMap<String, TokenType> = {
+        let mut map = HashMap::new();
+        map.insert("var".to_string(), TokenType::Var);
+        map.insert("true".to_string(), TokenType::Truth);
+        map.insert("false".to_string(), TokenType::Truth);
+        map
+    };
+}
+
 // Implement the Iterator trait for Lexer
 impl Iterator for Lexer {
     type Item = Token;
@@ -84,8 +99,8 @@ impl Iterator for Lexer {
                     self.advance();
                 }
 
-                if token.value == "var" {
-                    token.token_type = TokenType::Var;
+                if let Some(token_type) = KEYWORDS.get(&token.value) {
+                    token.token_type = token_type.clone();
                 } else {
                     token.token_type = TokenType::Name;
                 }
