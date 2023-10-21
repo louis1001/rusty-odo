@@ -21,10 +21,12 @@ impl Interpreter {
 
     fn interpret(&mut self, semantic_ast: SemanticAst) -> anyhow::Result<ExecutionResult> {
         match semantic_ast {
-            SemanticAst::Block(nodes) => {
+            SemanticAst::Block(nodes, scope_id) => {
+                self.semantic_analyzer.push_scope(scope_id);
                 for node in nodes {
                     self.interpret(node)?;
                 }
+                self.semantic_analyzer.pop_scope();
 
                 Ok(ExecutionResult { value: NO_VALUE.clone() })
             },
@@ -116,8 +118,8 @@ impl Interpreter {
         let mut parser = Parser::new(tokens);
         let statements = parser.statement_list()?;
 
-        let global_scope_id = self.semantic_analyzer.current_scope_id;
-        self.semantic_analyzer.current_scope_id = self.semantic_analyzer.repl_scope_id;
+        let repl_id = self.semantic_analyzer.repl_scope_id;
+        self.semantic_analyzer.push_scope(repl_id);
 
         let mut result = NO_VALUE.clone();
         for node in statements {
@@ -125,7 +127,7 @@ impl Interpreter {
             result = self.interpret(*semantic_result.node)?.value;
         }
 
-        self.semantic_analyzer.current_scope_id = global_scope_id;
+        self.semantic_analyzer.pop_scope();
 
         Ok(ExecutionResult { value: result })
     }

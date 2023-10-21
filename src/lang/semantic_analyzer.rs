@@ -17,8 +17,9 @@ impl SemanticAnalyzer {
         let global_table = SymbolTable::new("global_table".to_string());
         let id = global_table.table_id;
 
-        let repl_scope = SymbolTable::new("repl_scope".to_string());
+        let mut repl_scope = SymbolTable::new("repl_scope".to_string());
         let repl_scope_id = repl_scope.table_id;
+        repl_scope.parent = Some(id);
         
         SemanticAnalyzer {
             scopes: {
@@ -53,7 +54,7 @@ pub type SemanticNode = Box<SemanticAst>;
 
 #[derive(Debug)]
 pub enum SemanticAst {
-    Block(Vec<SemanticAst>),
+    Block(Vec<SemanticAst>, TableId),
     Number(Token),
     Truth(Token),
     Variable(Token),
@@ -150,13 +151,25 @@ impl SemanticAnalyzer {
     pub fn analyze_node(&mut self, ast: Node) -> anyhow::Result<SemanticResult> {
         match *ast {
             Ast::Block(nodes) => {
+                // Create a scope and set it as the current scope
+                let mut scope = SymbolTable::new("block".to_string());
+                let id = scope.table_id;
+
+                scope.parent = Some(self.current_scope_id);
+
+                self.scopes.insert(id, scope);
+                self.push_scope(id);
+                
                 let mut semantic_nodes = Vec::new();
 
                 for node in nodes {
                     semantic_nodes.push(*self.analyze_node(node)?.node);
                 }
 
-                let node = SemanticAst::Block(semantic_nodes);
+                let node = SemanticAst::Block(semantic_nodes, id);
+
+                // Set the current scope to the parent scope
+                self.pop_scope();
 
                 Ok(SemanticResult {
                     node: Box::new(node),
@@ -280,6 +293,16 @@ impl SemanticAnalyzer {
             },
             _ => Err(anyhow::anyhow!("Node is not a variable"))
         }
+    }
+
+    pub fn push_scope(&mut self, scope_id: TableId) {
+        self.current_scope_id = scope_id;
+    }
+
+    pub fn pop_scope(&mut self) {
+        self.current_scope_id = self.current_scope()
+            .expect("There's always a scope").parent
+            .expect("If you're popping a scope, it must have a parent");
     }
 }
 
