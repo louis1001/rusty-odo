@@ -16,3 +16,9 @@ path="src/main.rs"
 [dependencies]
 anyhow = "1.0.75"
 clap = { version = "4.4.6", features = ["derive"] }
+uuid = { version = "1.5.0" , features = [
+    "v4",                # Lets you generate random UUIDs
+    "fast-rng",          # Use a faster (but still sufficiently random) RNG
+    "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
+] }
+lazy_static = "1.4.0"

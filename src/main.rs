@@ -2,7 +2,7 @@ use clap::Parser as ClapParser;
 use std::io::Write;
 use anyhow;
 
-use odo::lang::{lexer::Lexer, parser::Parser};
+use odo::lang::{lexer::Lexer, parser::Parser, semantic_analyzer::SemanticAnalyzer};
 
 #[derive(ClapParser)]
 #[command(author, version, about)]
@@ -11,6 +11,8 @@ struct Cli {
 }
 
 fn repl() -> anyhow::Result<()> {
+    // It keeps context through the repl, so it's just one for all loops.
+    let mut semantic_analyzer = SemanticAnalyzer::new();
     loop {
         print!("> ");
         let mut input = String::new();
@@ -22,12 +24,25 @@ fn repl() -> anyhow::Result<()> {
         let tokens: Vec<_> = lexer.collect();
 
         let mut parser = Parser::new(tokens);
-        let ast = parser.parse();
+        let ast = match parser.parse() {
+            Ok(ast) => ast,
+            Err(e) => {
+                println!("{}", e);
+                continue;
+            }
+        };
 
-        match ast {
-            Ok(ast) => println!("{:#?}", ast),
-            Err(e) => println!("{}", e)
-        }
+        println!("{:#?}", ast);
+
+        let semantic_ast = match semantic_analyzer.analyze(ast) {
+            Ok(ast) => ast,
+            Err(e) => {
+                println!("{}", e);
+                continue;
+            }
+        };
+
+        println!("{:#?}", semantic_ast);
     }
 }
 

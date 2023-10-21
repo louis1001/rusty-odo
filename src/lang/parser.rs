@@ -35,7 +35,7 @@ impl std::error::Error for Error {}
 // The AST
 pub type Node = Box<Ast>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Ast {
     Block(Vec<Node>),
     Number(Token),
