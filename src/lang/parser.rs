@@ -41,7 +41,7 @@ pub enum Ast {
     Number(Token),
     Truth(Token),
     Variable(Token),
-    Assignment(Token, Node),
+    Assignment(Node, Node),
     Declaration(Token, Node),
     DebugPrint(Node) // Temporary
 }
@@ -78,6 +78,17 @@ impl Parser {
         Ok(Box::new(Ast::Block(ast)))
     }
 
+    pub fn statement_list(&mut self) -> anyhow::Result<Vec<Node>> {
+        let mut ast: Vec<Node> = Vec::new();
+        
+        // TODO: Add statement terminators
+        while let Some(_) = self.tokens.peek() {
+            ast.push(self.parse_statement()?);
+        }
+        
+        Ok(ast)
+    }
+
     pub fn parse_statement(&mut self) -> anyhow::Result<Node> {
         // Current Ast kinds of statement: 
         // - Assignment
@@ -85,14 +96,13 @@ impl Parser {
 
         match self.tokens.peek().unwrap().token_type {
             TokenType::Var => self.parse_declaration(),
-            TokenType::Name => self.parse_assignment(),
             TokenType::DebugPrint => {
                 self.consume(TokenType::DebugPrint).unwrap();
-                let expr = self.parse_expr()?;
+                let expr = self.parse_postfix()?;
 
                 Ok(Box::new(Ast::DebugPrint(expr)))
             },
-            _ => return Err(anyhow::anyhow!("Unexpected token {:?}", self.tokens.peek().unwrap().token_type))
+            _ => self.parse_postfix()
         }
     }
 
@@ -101,21 +111,37 @@ impl Parser {
         let name = self.consume(TokenType::Name)?;
         let _ = self.consume(TokenType::Assign)
             .context("Expected an assignment statement ('=')")?;
-        let expr = self.parse_expr()?;
+        let expr = self.parse_postfix()?;
 
         Ok(Box::new(Ast::Declaration(name, expr)))
     }
 
-    fn parse_assignment(&mut self) -> anyhow::Result<Node> {
-        let name = self.consume(TokenType::Name)?;
+    fn parse_assignment(&mut self, target_node: Node) -> anyhow::Result<Node> {
+        // TODO: Make sure the assignment target is valid
+
         self.consume(TokenType::Assign)
             .context("Expected an assignment statement ('=')")?;
-        let expr = self.parse_expr()?;
+        let expr = self.parse_postfix()?;
 
-        Ok(Box::new(Ast::Assignment(name, expr)))
+        Ok(Box::new(Ast::Assignment(target_node, expr)))
     }
 
-    fn parse_expr(&mut self) -> anyhow::Result<Node> {
+    fn parse_postfix(&mut self) -> anyhow::Result<Node> {
+        let mut expr = self.parse_factor()?;
+
+        while let Some(token) = self.tokens.peek().cloned() {
+            match token.token_type {
+                TokenType::Assign => {
+                    expr = self.parse_assignment(expr)?;
+                },
+                _ => break
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn parse_factor(&mut self) -> anyhow::Result<Node> {
         match self.tokens.peek().ok_or(Error::SuddenEndOfFile)?.token_type {
             TokenType::Number => {
                 let token = self.tokens.next().ok_or(Error::SuddenEndOfFile)?;

@@ -20,7 +20,7 @@ fn repl() -> anyhow::Result<()> {
         std::io::stdout().flush()?;
         std::io::stdin().read_line(&mut input)?;
 
-        let result = match interpreter.repl(input) {
+        let result = match interpreter.eval(input) {
             Ok(result) => result,
             Err(e) => {
                 println!("{}", e);

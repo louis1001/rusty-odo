@@ -19,18 +19,6 @@ impl Interpreter {
         }
     }
 
-    pub fn repl(&mut self, code: String) -> anyhow::Result<ExecutionResult> {
-        let lexer = Lexer::new(code);
-        let tokens: Vec<_> = lexer.collect();
-
-        let mut parser = Parser::new(tokens);
-        let ast = parser.parse()?;
-
-        let semantic_result = self.semantic_analyzer.analyze(ast)?;
-
-        self.interpret(*semantic_result.node)
-    }
-
     fn interpret(&mut self, semantic_ast: SemanticAst) -> anyhow::Result<ExecutionResult> {
         match semantic_ast {
             SemanticAst::Block(nodes) => {
@@ -61,8 +49,6 @@ impl Interpreter {
 
                 let value = self.value_table.get(self.symbol_to_value[&symbol.symbol_id]).ok_or(anyhow::anyhow!("Value not found"))?;
 
-                println!("{:?}", value.clone());
-
                 Ok(ExecutionResult { value: value.clone() })
             },
             SemanticAst::Declaration(token, _, node) => {
@@ -76,10 +62,12 @@ impl Interpreter {
 
                 Ok(ExecutionResult { value: NO_VALUE.clone() })
             },
-            SemanticAst::Assignment(token, node) => {
+            SemanticAst::Assignment(target_id, node) => {
                 let result = self.interpret(*node)?;
 
-                let symbol = self.semantic_analyzer.current_scope().expect("There's always a scope").lookup(token.value).ok_or(anyhow::anyhow!("Symbol not found"))?;
+                let symbol = self.semantic_analyzer.current_scope()
+                    .expect("There's always a scope").lookup_id(target_id)
+                    .ok_or(anyhow::anyhow!("Symbol not found"))?;
 
                 self.symbol_to_value.insert(symbol.symbol_id, result.value.uuid);
 
@@ -95,6 +83,51 @@ impl Interpreter {
                 Ok(ExecutionResult { value: NO_VALUE.clone() })
             }
         }
+    }
+
+    /* This is a translation of this old C++ code:
+    value_t Interpreter::eval(std::string code) {
+
+        call_stack.push_back({"global", 1, 1});
+        parser.set_text(std::move(code));
+
+        auto statements = parser.program_content();
+
+    //    try{
+        currentScope = &replScope;
+
+        auto result = null;
+        for (const auto& node : statements) {
+            analyzer->from_repl(node);
+            result = visit(node);
+        }
+
+        currentScope = &globalTable;
+    //    }
+        call_stack.pop_back();
+
+        return result;
+    }
+     */
+    pub fn eval(&mut self, code: String) -> anyhow::Result<ExecutionResult> {
+        let lexer = Lexer::new(code);
+        let tokens: Vec<_> = lexer.collect();
+
+        let mut parser = Parser::new(tokens);
+        let statements = parser.statement_list()?;
+
+        let global_scope_id = self.semantic_analyzer.current_scope_id;
+        self.semantic_analyzer.current_scope_id = self.semantic_analyzer.repl_scope_id;
+
+        let mut result = NO_VALUE.clone();
+        for node in statements {
+            let semantic_result = self.semantic_analyzer.analyze(node)?;
+            result = self.interpret(*semantic_result.node)?.value;
+        }
+
+        self.semantic_analyzer.current_scope_id = global_scope_id;
+
+        Ok(ExecutionResult { value: result })
     }
 }
 

@@ -8,21 +8,27 @@ use super::{parser::Node, lexer::Token};
 
 pub struct SemanticAnalyzer {
     scopes: HashMap<Uuid, SymbolTable>,
-    current_scope_id: Uuid
+    pub current_scope_id: TableId,
+    pub repl_scope_id: TableId
 }
 
 impl SemanticAnalyzer {
     pub fn new() -> SemanticAnalyzer {
         let global_table = SymbolTable::new("global_table".to_string());
         let id = global_table.table_id;
+
+        let repl_scope = SymbolTable::new("repl_scope".to_string());
+        let repl_scope_id = repl_scope.table_id;
         
         SemanticAnalyzer {
             scopes: {
                 let mut map = HashMap::new();
                 map.insert(global_table.table_id, global_table);
+                map.insert(repl_scope.table_id, repl_scope);
                 map
             },
-            current_scope_id: id
+            current_scope_id: id,
+            repl_scope_id
         }
     }
 
@@ -52,23 +58,25 @@ pub enum SemanticAst {
     Truth(Token),
     Variable(Token),
     // It should also store the infered type
-    Declaration(Token, Uuid, Box<SemanticAst>),
-    Assignment(Token, Box<SemanticAst>),
-    DebugPrint(Box<SemanticAst>)
+    Declaration(Token, Uuid, SemanticNode),
+    Assignment(Uuid, SemanticNode),
+    DebugPrint(SemanticNode)
 }
+
+type TableId = Uuid;
 
 pub struct SymbolTable {
     name: String,
-    table_id: Uuid,
-    parent: Option<Uuid>,
-    symbols: HashMap<Uuid, Symbol>
+    table_id: TableId,
+    parent: Option<TableId>,
+    symbols: HashMap<TableId, Symbol>
 }
 
 impl SymbolTable {
     pub fn new(name: String) -> Self {
         SymbolTable {
             name,
-            table_id: Uuid::new_v4(),
+            table_id: TableId::new_v4(),
             parent: None,
             symbols: HashMap::new()
         }
@@ -86,15 +94,17 @@ impl SymbolTable {
     }
 
     // Lookup by id
-    pub fn lookup_id(&self, id: Uuid) -> Option<&Symbol> {
+    pub fn lookup_id(&self, id: SymbolId) -> Option<&Symbol> {
         self.symbols.get(&id)
     }
 }
 
+type SymbolId = Uuid;
+
 #[derive(Clone)]
 pub struct Symbol {
     name: String,
-    pub symbol_id: Uuid,
+    pub symbol_id: SymbolId,
     pub variant: SymbolVariant
 }
 
@@ -102,7 +112,7 @@ impl Symbol {
     pub fn new(name: String, kind: SymbolVariant) -> Self {
         Symbol {
             name: name,
-            symbol_id: Uuid::new_v4(),
+            symbol_id: SymbolId::new_v4(),
             variant: kind
         }
     }
@@ -117,7 +127,7 @@ pub enum SymbolVariant {
 // Symbol variants:
 #[derive(Clone)]
 pub struct Variable {
-    type_id: Uuid
+    type_id: SymbolId
 }
 
 // Semantic analysis
@@ -126,7 +136,7 @@ pub struct Variable {
 #[derive(Debug)]
 pub struct SemanticResult {
     pub node: SemanticNode,
-    type_id: Option<Uuid>,
+    type_id: Option<SymbolId>,
     // More context to be added later...
     // Does this node have side effects, for example.
 }
@@ -134,11 +144,7 @@ pub struct SemanticResult {
 impl SemanticAnalyzer {
     pub fn analyze(&mut self, ast: Node) -> anyhow::Result<SemanticResult> {
         let ast = ast.clone();
-        let semantic_ast = self.analyze_node(ast)?;
-
-        println!("{:#?}", semantic_ast.node);
-
-        Ok(semantic_ast)
+        Ok(self.analyze_node(ast)?)
     }
 
     pub fn analyze_node(&mut self, ast: Node) -> anyhow::Result<SemanticResult> {
@@ -218,16 +224,14 @@ impl SemanticAnalyzer {
                     type_id: None
                 })
             },
-            Ast::Assignment(token, node) => {
+            Ast::Assignment(target, node) => {
                 let result_node = self.analyze_node(node)?;
 
-                // Lookup the variable and get its type
-                let symbol = self.current_scope().expect("There's always a scope")
-                    .lookup(token.value.clone())
-                    .ok_or(anyhow::anyhow!("Assignment to unknown variable {}.", token.value))?;
+                let target_symbol = self.symbol_from_node(&*target)?;
 
+                // Get the type of the target
                 // TODO: Expand the kinds of symbol that can be assigned to
-                let type_id = match symbol.variant {
+                let type_id = match target_symbol.variant {
                     SymbolVariant::Variable(ref var) => var.type_id,
                     _ => panic!("Symbol is not a variable")
                 };
@@ -243,7 +247,7 @@ impl SemanticAnalyzer {
                     );
                 }
 
-                let node = SemanticAst::Assignment(token, result_node.node);
+                let node = SemanticAst::Assignment(target_symbol.symbol_id, result_node.node);
 
                 Ok(SemanticResult {
                     node: Box::new(node),
@@ -266,11 +270,22 @@ impl SemanticAnalyzer {
             }
         }
     }
+
+    // Find symbol from node
+    fn symbol_from_node(&self, node: &Ast) -> anyhow::Result<&Symbol> {
+        match node {
+            Ast::Variable(token) => {
+                self.current_scope().expect("There's always a scope").lookup(token.value.clone())
+                    .ok_or(anyhow::anyhow!("Variable {} not found", token.value))
+            },
+            _ => Err(anyhow::anyhow!("Node is not a variable"))
+        }
+    }
 }
 
 // For report purposes
 impl SemanticAnalyzer {
-    fn name_of_type(&self, id: Uuid) -> Option<&str> {
+    fn name_of_type(&self, id: SymbolId) -> Option<&str> {
         let symbol = self.current_scope().expect("There's always a scope").lookup_id(id);
 
         symbol.map(|symbol| symbol.name.as_str())
