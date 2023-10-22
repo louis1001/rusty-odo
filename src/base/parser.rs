@@ -40,6 +40,7 @@ pub enum Ast {
     Block(Vec<Node>),
     Number(Token),
     Truth(Token),
+    Text(Token),
     Variable(Token),
     Assignment(Node, Node),
     Declaration(Token, Node),
@@ -243,17 +244,21 @@ impl Parser {
 
         match self.tokens.peek().ok_or(Error::SuddenEndOfFile)?.token_type {
             TokenType::Number => {
-                let token = self.tokens.next().ok_or(Error::SuddenEndOfFile)?;
+                let token = self.tokens.next().expect("We just peeked");
                 Ok(Box::new(Ast::Number(token)))
             },
             TokenType::Truth => {
-                let token = self.tokens.next().ok_or(Error::SuddenEndOfFile)?;
+                let token = self.tokens.next().expect("We just peeked");
                 Ok(Box::new(Ast::Truth(token)))
             },
-            TokenType::Name => {
-                Ok(Box::new(Ast::Variable(self.tokens.next().ok_or(Error::SuddenEndOfFile)?)))
+            TokenType::Text => {
+                let token = self.tokens.next().expect("We just peeked");
+                Ok(Box::new(Ast::Text(token)))
             },
-            _ => return Err(anyhow::anyhow!("Unexpected token {:?}", self.tokens.peek().unwrap().token_type))
+            TokenType::Name => {
+                Ok(Box::new(Ast::Variable(self.tokens.next().expect("We just peeked"))))
+            },
+            _ => return Err(anyhow::anyhow!("Unexpected token {:?}", self.tokens.peek().expect("We just peeked").token_type))
         }
     }
 }

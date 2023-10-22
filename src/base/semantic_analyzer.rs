@@ -18,7 +18,7 @@ impl SemanticAnalyzer {
         // Primitive types
         global_table.symbols.insert(INT_TYPE.symbol_id, INT_TYPE.clone());
         global_table.symbols.insert(DEC_TYPE.symbol_id, DEC_TYPE.clone());
-        global_table.symbols.insert(STRING_TYPE.symbol_id, STRING_TYPE.clone());
+        global_table.symbols.insert(TEXT_TYPE.symbol_id, TEXT_TYPE.clone());
         global_table.symbols.insert(TRUTH_TYPE.symbol_id, TRUTH_TYPE.clone());
 
         let id = global_table.table_id;
@@ -54,7 +54,7 @@ lazy_static! {
     /// This stores the primitive types
     static ref INT_TYPE: Symbol = Symbol::new("int".to_string(), SymbolVariant::Primitive);
     static ref DEC_TYPE: Symbol = Symbol::new("dec".to_string(), SymbolVariant::Primitive); // Equivalent to float
-    static ref STRING_TYPE: Symbol = Symbol::new("string".to_string(), SymbolVariant::Primitive);
+    static ref TEXT_TYPE: Symbol = Symbol::new("string".to_string(), SymbolVariant::Primitive);
     static ref TRUTH_TYPE: Symbol = Symbol::new("truth".to_string(), SymbolVariant::Primitive);
 }
 
@@ -65,6 +65,7 @@ pub enum SemanticAst {
     Block(Vec<SemanticAst>, TableId),
     Number(Token),
     Truth(Token),
+    Text(Token),
     Variable(SymbolId),
     // It should also store the infered type
     Declaration(SymbolId, Uuid, SemanticNode),
@@ -199,6 +200,14 @@ impl SemanticAnalyzer {
                 Ok(SemanticResult {
                     node: Box::new(node),
                     type_id: Some(TRUTH_TYPE.symbol_id)
+                })
+            },
+            Ast::Text(token) => {
+                let node = SemanticAst::Text(token);
+
+                Ok(SemanticResult {
+                    node: Box::new(node),
+                    type_id: Some(TEXT_TYPE.symbol_id)
                 })
             },
             Ast::Variable(token) => {

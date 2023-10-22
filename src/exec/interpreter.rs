@@ -40,6 +40,11 @@ impl Interpreter {
 
                 Ok(ExecutionResult { value: value })
             },
+            SemanticAst::Text(token) => {
+                let value = Value::new(ValueVariant::Primitive(PrimitiveValue::Text(token.value)));
+
+                Ok(ExecutionResult { value: value })
+            },
             SemanticAst::Variable(id) => {
                 let symbol = self.semantic_analyzer.current_scope().expect("There's always a scope")
                     .symbol_from_id(id, &self.semantic_analyzer)

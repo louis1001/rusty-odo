@@ -36,7 +36,7 @@ pub enum ValueVariant {
 pub enum PrimitiveValue {
     Int(i64),
     Dec(f64),
-    String(String),
+    Text(String),
     Bool(bool),
 }
 

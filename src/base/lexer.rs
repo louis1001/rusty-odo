@@ -17,6 +17,8 @@ pub enum TokenType {
     Name, // a
     Number, // 10.0
     Truth,
+    Text,
+
     Assign, // =
 
     NewLine, // \n
@@ -90,6 +92,7 @@ lazy_static! {
 impl Iterator for Lexer {
     type Item = Token;
 
+    // FIXME: Handle errors while iterating
     fn next(&mut self) -> Option<Token> {
         self.ignore_whitespace();
         if let Some(curr) = self.current_char() {
@@ -126,6 +129,20 @@ impl Iterator for Lexer {
                     token.value.push(c);
                     self.advance();
                 }
+            } else if curr == '\"' {
+                token.token_type = TokenType::Text;
+                self.advance();
+                
+                let text_token = self.text();
+                match text_token {
+                    Ok(text_token) => {
+                        token.value = text_token.value;
+                    },
+                    Err(e) => {
+                        eprintln!("Error in text literal: {}", e);
+                        return None;
+                    }
+                }
             } else if curr == '\n' {
                 token.token_type = TokenType::NewLine;
                 token.value.push(curr);
@@ -158,5 +175,75 @@ impl Iterator for Lexer {
         } else {
             None
         }
+    }
+}
+
+impl Lexer {
+    fn escape_char(&mut self) -> Option<char> {
+        let escape: HashMap<char, char> = [
+            ('\\', '\\'),
+            ('n', '\n'),
+            ('r', '\r'),
+            ('t', '\t'),
+            ('b', '\x08'),
+            ('a', '\x07'),
+            ('v', '\x0B'),
+            ('\'', '\''),
+            ('\"', '\"'),
+            ('?', '\x3F'),
+        ].iter().cloned().collect();
+
+        let escapee = match self.current_char() {
+            Some(c) => c,
+            None => return None // Unexpected end of file
+        };
+
+        let found_in_dict = escape.get(&escapee);
+        self.advance();
+        if let Some(c) = found_in_dict {
+            return Some(*c);
+        } else {
+            return Some(escapee);
+        }
+    }
+
+    fn text(&mut self) -> anyhow::Result<Token> {
+        let mut token = Token {
+            token_type: TokenType::Text,
+            value: String::new(),
+            line: self.current_line,
+            column: self.current_column,
+        };
+
+
+        let mut found_end = false;
+
+        while let Some(c) = self.current_char() {
+            if c == '\"' {
+                found_end = true;
+                self.advance();
+                break;
+            }
+
+            if c == '\\' {
+                self.advance();
+                let escaped = match self.escape_char() {
+                    Some(c) => c,
+                    None => return Err(anyhow::anyhow!("Unexpected end of file"))
+                };
+
+                token.value.push(escaped);
+            } else {
+                token.value.push(c);
+                self.advance();
+            }
+        }
+
+        if found_end {
+            Ok(token)
+        } else {
+            Err(anyhow::anyhow!("Untermited string literal"))
+        } 
+
     }
 }

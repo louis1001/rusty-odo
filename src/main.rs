@@ -1,10 +1,10 @@
-use clap::Parser as ClapParser;
+use clap::Parser;
 use std::io::Write;
 use anyhow;
 
 use odo::exec::interpreter::Interpreter;
 
-#[derive(ClapParser)]
+#[derive(Parser)]
 #[command(author, version, about)]
 struct Cli {
     source_file: Option<String>
