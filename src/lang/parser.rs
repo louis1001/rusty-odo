@@ -68,6 +68,16 @@ impl Parser {
         }
     }
 
+    fn ignore_newline(&mut self) {
+        while let Some(token) = self.tokens.peek() {
+            if token.token_type == TokenType::NewLine {
+                let _ = self.consume(TokenType::NewLine);
+            } else {
+                break;
+            }
+        }
+    }
+
     pub fn parse(&mut self) -> anyhow::Result<Node> {
         let mut ast: Vec<Node> = Vec::new();
         
@@ -80,22 +90,81 @@ impl Parser {
 
     pub fn statement_list(&mut self) -> anyhow::Result<Vec<Node>> {
         let mut ast: Vec<Node> = Vec::new();
+
+        self.ignore_newline();
+
+        if let Ok(_) = self.consume(TokenType::RightCurly) {
+            return Ok(ast);
+        }
         
-        // TODO: Add statement terminators
         while let Some(_) = self.tokens.peek() {
+            // check terminators
+            if self.tokens.peek().unwrap().token_type == TokenType::RightCurly {
+                break;
+            }
+            
             ast.push(self.parse_statement()?);
         }
         
         Ok(ast)
     }
 
+    fn check_statement_terminator(&mut self) -> anyhow::Result<()> {
+        // Consume statement terminators
+        let token = match self.tokens.peek() {
+            Some(token) => token,
+            None => return Ok(()) // End of file is a valid statement terminator
+        };
+
+        let block_terminators = vec![TokenType::RightCurly]; // Anything that would work as termination in a wrap block
+
+        if token.token_type == TokenType::SemiColon {
+            let _ = self.consume(TokenType::SemiColon)?;
+
+            // Consume all new lines after this
+            while let Some(token) = self.tokens.peek() {
+                if token.token_type == TokenType::NewLine {
+                    let _ = self.consume(TokenType::NewLine)?;
+                } else {
+                    break;
+                }
+            }
+            // if it's not one of the block terminators
+        } else if !block_terminators.contains(&token.token_type) {
+            // Expect at least one new line, and consume all others
+            let _ = self.consume(TokenType::NewLine)?;
+
+            while let Some(token) = self.tokens.peek() {
+                if token.token_type == TokenType::NewLine {
+                    let _ = self.consume(TokenType::NewLine)?;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn parse_statement(&mut self) -> anyhow::Result<Node> {
+        let result = self.parse_statement_without_terminator()?;
+
+        self.check_statement_terminator()?;
+
+        Ok(result)
+    }
+
+    pub fn parse_statement_without_terminator(&mut self) -> anyhow::Result<Node> {
         // Current Ast kinds of statement: 
         // - Assignment
+        // - Block
         // - DebugPrint
+
+        self.ignore_newline();
 
         match self.tokens.peek().unwrap().token_type {
             TokenType::Var => self.parse_declaration(),
+            TokenType::LeftCurly => self.parse_block(),
             TokenType::DebugPrint => {
                 self.consume(TokenType::DebugPrint).unwrap();
                 let expr = self.parse_postfix()?;
@@ -106,8 +175,28 @@ impl Parser {
         }
     }
 
+    fn parse_block(&mut self) -> anyhow::Result<Node> {
+        let _ = self.consume(TokenType::LeftCurly)?;
+        self.ignore_newline();
+        let mut nodes = Vec::new();
+
+        while let Some(token) = self.tokens.peek().cloned() {
+            if token.token_type == TokenType::RightCurly {
+                break;
+            }
+
+            nodes.push(self.parse_statement()?);
+        }
+
+        let _ = self.consume(TokenType::RightCurly)?;
+
+        Ok(Box::new(Ast::Block(nodes)))
+    }
+
     fn parse_declaration(&mut self) -> anyhow::Result<Node> {
         let _ = self.consume(TokenType::Var)?;
+        self.ignore_newline();
+
         let name = self.consume(TokenType::Name)?;
         let _ = self.consume(TokenType::Assign)
             .context("Expected an assignment statement ('=')")?;
@@ -118,6 +207,7 @@ impl Parser {
 
     fn parse_assignment(&mut self, target_node: Node) -> anyhow::Result<Node> {
         // TODO: Make sure the assignment target is valid
+        self.ignore_newline();
 
         self.consume(TokenType::Assign)
             .context("Expected an assignment statement ('=')")?;
@@ -128,6 +218,8 @@ impl Parser {
 
     fn parse_postfix(&mut self) -> anyhow::Result<Node> {
         let mut expr = self.parse_factor()?;
+
+        self.ignore_newline();
 
         while let Some(token) = self.tokens.peek().cloned() {
             match token.token_type {
@@ -142,6 +234,8 @@ impl Parser {
     }
 
     fn parse_factor(&mut self) -> anyhow::Result<Node> {
+        self.ignore_newline();
+
         match self.tokens.peek().ok_or(Error::SuddenEndOfFile)?.token_type {
             TokenType::Number => {
                 let token = self.tokens.next().ok_or(Error::SuddenEndOfFile)?;

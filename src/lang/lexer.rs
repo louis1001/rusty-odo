@@ -18,6 +18,14 @@ pub enum TokenType {
     Number, // 10.0
     Truth,
     Assign, // =
+
+    NewLine, // \n
+
+    SemiColon, // ;
+
+    LeftCurly, // {
+    RightCurly, // }
+
     DebugPrint // ':' - Temporary
 }
 
@@ -55,7 +63,7 @@ impl Lexer {
 
     fn ignore_whitespace(&mut self) {
         while let Some(c) = self.current_char() {
-            if !c.is_whitespace() {
+            if !c.is_whitespace() || c == '\n' {
                 break;
             }
 
@@ -114,8 +122,24 @@ impl Iterator for Lexer {
                     token.value.push(c);
                     self.advance();
                 }
+            } else if curr == '\n' {
+                token.token_type = TokenType::NewLine;
+                token.value.push(curr);
+                self.advance();
             } else if curr == '=' {
                 token.token_type = TokenType::Assign;
+                token.value.push(curr);
+                self.advance();
+            } else if curr == '{' {
+                token.token_type = TokenType::LeftCurly;
+                token.value.push(curr);
+                self.advance();
+            } else if curr == '}' {
+                token.token_type = TokenType::RightCurly;
+                token.value.push(curr);
+                self.advance();
+            } else if curr == ';' {
+                token.token_type = TokenType::SemiColon;
                 token.value.push(curr);
                 self.advance();
             } else if curr == ':' {
