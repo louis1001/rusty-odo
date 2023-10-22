@@ -14,7 +14,13 @@ pub struct SemanticAnalyzer {
 
 impl SemanticAnalyzer {
     pub fn new() -> SemanticAnalyzer {
-        let global_table = SymbolTable::new("global_table".to_string());
+        let mut global_table = SymbolTable::new("global_table".to_string());
+        // Primitive types
+        global_table.symbols.insert(INT_TYPE.symbol_id, INT_TYPE.clone());
+        global_table.symbols.insert(DEC_TYPE.symbol_id, DEC_TYPE.clone());
+        global_table.symbols.insert(STRING_TYPE.symbol_id, STRING_TYPE.clone());
+        global_table.symbols.insert(TRUTH_TYPE.symbol_id, TRUTH_TYPE.clone());
+
         let id = global_table.table_id;
 
         let mut repl_scope = SymbolTable::new("repl_scope".to_string());
@@ -47,7 +53,7 @@ lazy_static! {
     static ref INT_TYPE: Symbol = Symbol::new("int".to_string(), SymbolVariant::Primitive);
     static ref DEC_TYPE: Symbol = Symbol::new("dec".to_string(), SymbolVariant::Primitive); // Equivalent to float
     static ref STRING_TYPE: Symbol = Symbol::new("string".to_string(), SymbolVariant::Primitive);
-    static ref BOOL_TYPE: Symbol = Symbol::new("bool".to_string(), SymbolVariant::Primitive);
+    static ref TRUTH_TYPE: Symbol = Symbol::new("truth".to_string(), SymbolVariant::Primitive);
 }
 
 pub type SemanticNode = Box<SemanticAst>;
@@ -102,7 +108,7 @@ impl SymbolTable {
 
 type SymbolId = Uuid;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Symbol {
     name: String,
     pub symbol_id: SymbolId,
@@ -119,14 +125,14 @@ impl Symbol {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum SymbolVariant {
     Variable(Variable),
     Primitive // Primitives only need their name
 }
 
 // Symbol variants:
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Variable {
     type_id: SymbolId
 }
@@ -189,7 +195,7 @@ impl SemanticAnalyzer {
 
                 Ok(SemanticResult {
                     node: Box::new(node),
-                    type_id: Some(BOOL_TYPE.symbol_id)
+                    type_id: Some(TRUTH_TYPE.symbol_id)
                 })
             },
             Ast::Variable(token) => {
@@ -217,7 +223,11 @@ impl SemanticAnalyzer {
                     .ok_or(anyhow::anyhow!("Variable initialization must be a valid expression (Must return value)"))?;
 
                 // Check if the variable has already been declared
-                if self.current_scope().expect("There's always a scope").lookup(token.value.clone()).is_some() {
+                if self.current_scope()
+                    .expect("There's always a scope")
+                    .symbol_from_node(&Ast::Variable(token.clone()), &self)?
+                    .is_some()
+                {
                     return Err(anyhow::anyhow!("Variable called {} already exists.", token.value));
                 }
 
@@ -240,7 +250,8 @@ impl SemanticAnalyzer {
             Ast::Assignment(target, node) => {
                 let result_node = self.analyze_node(node)?;
 
-                let target_symbol = self.symbol_from_node(&*target)?;
+                let target_symbol = self.symbol_from_node(&*target)?
+                .ok_or(anyhow::anyhow!("Symbol not found"))?;
 
                 // Get the type of the target
                 // TODO: Expand the kinds of symbol that can be assigned to
@@ -254,8 +265,11 @@ impl SemanticAnalyzer {
                     return Err(
                         anyhow::anyhow!(
                             "Type mismatch: Expected type {:?} but got type {:?}",
-                            self.name_of_type(type_id).unwrap_or("<unknown>"),
-                            result_node.type_id.map(|id| self.name_of_type(id)).unwrap_or(Some("<unknown>")).unwrap_or("<unknown>") // FIXME: This is ugly
+                            self.name_of_type(type_id).unwrap_or("<unknown>".to_string()),
+                            result_node.type_id
+                                .map(|id| self.name_of_type(id))
+                                .unwrap_or(Some("<unknown>".to_string()))
+                                .unwrap_or("<unknown>".to_string()) // FIXME: This is ugly
                         )
                     );
                 }
@@ -284,17 +298,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    // Find symbol from node
-    fn symbol_from_node(&self, node: &Ast) -> anyhow::Result<&Symbol> {
-        match node {
-            Ast::Variable(token) => {
-                self.current_scope().expect("There's always a scope").lookup(token.value.clone())
-                    .ok_or(anyhow::anyhow!("Variable {} not found", token.value))
-            },
-            _ => Err(anyhow::anyhow!("Node is not a variable"))
-        }
-    }
-
     pub fn push_scope(&mut self, scope_id: TableId) {
         self.current_scope_id = scope_id;
     }
@@ -306,11 +309,63 @@ impl SemanticAnalyzer {
     }
 }
 
+// To recursively handle symbols in scopes
+impl SemanticAnalyzer {
+    // Find symbol from node
+    fn symbol_from_node(&self, node: &Ast) -> anyhow::Result<Option<&Symbol>> {
+        self.current_scope().expect("There's always a scope")
+            .symbol_from_node(node, &self)
+    }
+}
+
+impl SymbolTable {
+    fn symbol_from_node<'a>(&'a self, node: &Ast, semantic_analyzer: &'a SemanticAnalyzer) -> anyhow::Result<Option<&'a Symbol>> {
+        let result = match node {
+            Ast::Variable(token) => {
+                self.lookup(token.value.clone())
+            }
+            _ => return Err(anyhow::anyhow!("Expected a variable"))
+        };
+
+        match result {
+            Some(symbol) => Ok(Some(symbol)),
+            None => {
+                if let Some(parent) = self.parent_scope(semantic_analyzer) {
+                    parent.symbol_from_node(node, semantic_analyzer)
+                } else {
+                    Ok(None)
+                }
+            }
+        }
+    }
+}
+
 // For report purposes
 impl SemanticAnalyzer {
-    fn name_of_type(&self, id: SymbolId) -> Option<&str> {
-        let symbol = self.current_scope().expect("There's always a scope").lookup_id(id);
+    fn name_of_type(&self, id: SymbolId) -> Option<String> {
+        self.current_scope().expect("There's always a scope")
+        .name_of_type(id, &self)
+    }
+}
 
-        symbol.map(|symbol| symbol.name.as_str())
+impl SymbolTable {
+    fn parent_scope<'a>(&self, semantic_analyzer: &'a SemanticAnalyzer) -> Option<&'a SymbolTable> {
+        if let Some(parent_id) = self.parent {
+            return semantic_analyzer.scopes.get(&parent_id);
+        }
+
+        None
+    }
+
+    fn name_of_type(&self, id: SymbolId, semantic_analyzer: &SemanticAnalyzer) -> Option<String> {
+        let symbol = self.lookup_id(id);
+
+        if let Some(symbol) = symbol {
+            Some(symbol.name.clone())
+        } else if let Some(parent) = self.parent_scope(semantic_analyzer) {
+            parent.name_of_type(id, semantic_analyzer)
+        } else {
+            None
+        }
     }
 }
