@@ -1,6 +1,6 @@
 use anyhow::Context;
 
-use crate::lang::lexer::{Token, TokenType};
+use crate::base::lexer::{Token, TokenType};
 
 pub struct Parser {
     // tokens is a peekable iterator on a collection of Tokens
@@ -271,13 +271,13 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    fn parser(input: &str) -> crate::lang::parser::Parser {
-        use crate::lang::lexer::Lexer;
+    fn parser(input: &str) -> crate::base::parser::Parser {
+        use crate::base::lexer::Lexer;
 
         let lexer = Lexer::new(input.to_string());
         let tokens: Vec<_> = lexer.collect();
 
-        crate::lang::parser::Parser::new(tokens)
+        crate::base::parser::Parser::new(tokens)
     }
 
     #[test]

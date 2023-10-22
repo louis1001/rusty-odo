@@ -2,7 +2,7 @@ use clap::Parser as ClapParser;
 use std::io::Write;
 use anyhow;
 
-use odo::lang::interpreter::Interpreter;
+use odo::exec::interpreter::Interpreter;
 
 #[derive(ClapParser)]
 #[command(author, version, about)]
@@ -29,7 +29,7 @@ fn repl() -> anyhow::Result<()> {
         };
 
         match result.value.content {
-            odo::lang::interpreter::ValueVariant::Nothing => {},
+            odo::exec::value::ValueVariant::Nothing => {},
             _ => println!("{:#?}", result.value.content)
         }
     }

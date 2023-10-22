@@ -1,4 +1,4 @@
-use crate::lang::parser::Ast;
+use crate::base::parser::Ast;
 
 use std::collections::HashMap;
 use uuid::Uuid;

@@ -1,8 +1,8 @@
-use lazy_static::lazy_static;
 use uuid::Uuid;
 use std::collections::HashMap;
+use super::value::{ValueTable, Value, NO_VALUE, PrimitiveValue, ValueVariant};
 
-use super::{semantic_analyzer::{SemanticAnalyzer, SemanticAst}, lexer::Lexer, parser::Parser};
+use crate::base::{semantic_analyzer::{SemanticAnalyzer, SemanticAst}, lexer::Lexer, parser::Parser};
 
 pub struct Interpreter {
     pub value_table: ValueTable,
@@ -31,18 +31,12 @@ impl Interpreter {
                 Ok(ExecutionResult { value: NO_VALUE.clone() })
             },
             SemanticAst::Number(token) => {
-                let value = Value {
-                    content: ValueVariant::Primitive(PrimitiveValue::Int(token.value.parse::<i64>()?)),
-                    uuid: Uuid::new_v4()
-                };
+                let value = Value::new(ValueVariant::Primitive(PrimitiveValue::Int(token.value.parse::<i64>()?)));
 
                 Ok(ExecutionResult { value: value })
             },
             SemanticAst::Truth(token) => {
-                let value = Value {
-                    content: ValueVariant::Primitive(PrimitiveValue::Bool(token.value.parse::<bool>()?)),
-                    uuid: Uuid::new_v4()
-                };
+                let value = Value::new(ValueVariant::Primitive(PrimitiveValue::Bool(token.value.parse::<bool>()?)));
 
                 Ok(ExecutionResult { value: value })
             },
@@ -148,47 +142,3 @@ pub struct ExecutionResult {
     pub value: Value
 }
 
-#[derive(Debug)]
-pub struct ValueTable {
-    values: HashMap<Uuid, Value>,
-}
-
-#[derive(Clone, Debug)]
-pub struct Value {
-    pub content: ValueVariant,
-    uuid: Uuid,
-}
-
-lazy_static! {
-    pub static ref NO_VALUE: Value = Value { content: ValueVariant::Nothing, uuid: Uuid::new_v4() };
-}
-
-#[derive(Clone, Debug)]
-pub enum ValueVariant {
-    Nothing,
-    Primitive(PrimitiveValue),
-}
-
-#[derive(Clone, Debug)]
-pub enum PrimitiveValue {
-    Int(i64),
-    Dec(f64),
-    String(String),
-    Bool(bool),
-}
-
-impl ValueTable {
-    pub fn new() -> ValueTable {
-        ValueTable {
-            values: HashMap::new(),
-        }
-    }
-
-    pub fn insert(&mut self, value: Value) {
-        self.values.insert(value.uuid, value);
-    }
-
-    pub fn get(&self, uuid: Uuid) -> Option<&Value> {
-        self.values.get(&uuid)
-    }
-}
