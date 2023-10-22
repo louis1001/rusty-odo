@@ -67,8 +67,8 @@ pub enum SemanticAst {
     Truth(Token),
     Variable(SymbolId),
     // It should also store the infered type
-    Declaration(Token, Uuid, SemanticNode),
-    Assignment(Uuid, SemanticNode),
+    Declaration(SymbolId, Uuid, SemanticNode),
+    Assignment(SymbolId, SemanticNode),
     If(SemanticNode, SemanticNode),
     DebugPrint(SemanticNode)
 }
@@ -109,7 +109,7 @@ impl SymbolTable {
     }
 }
 
-type SymbolId = Uuid;
+pub type SymbolId = Uuid;
 
 #[derive(Clone, Debug)]
 pub struct Symbol {
@@ -242,7 +242,7 @@ impl SemanticAnalyzer {
                 self.current_scope_mut()?
                     .symbols.insert(symbol.symbol_id, symbol.clone());
 
-                let node = SemanticAst::Declaration(token, symbol.symbol_id, result_node.node);
+                let node = SemanticAst::Declaration(symbol.symbol_id, symbol.symbol_id, result_node.node);
 
                 Ok(SemanticResult {
                     node: Box::new(node),

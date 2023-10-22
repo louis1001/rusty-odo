@@ -49,10 +49,12 @@ impl Interpreter {
 
                 Ok(ExecutionResult { value: value.clone() })
             },
-            SemanticAst::Declaration(token, _, node) => {
+            SemanticAst::Declaration(target, _, node) => {
                 let result = self.interpret(*node)?;
 
-                let symbol = self.semantic_analyzer.current_scope().expect("There's always a scope").lookup(token.value).ok_or(anyhow::anyhow!("Symbol not found"))?;
+                let symbol = self.semantic_analyzer.current_scope()
+                    .expect("There's always a scope")
+                    .lookup_id(target).ok_or(anyhow::anyhow!("Symbol not found"))?;
 
                 self.symbol_to_value.insert(symbol.symbol_id, result.value.uuid);
 
