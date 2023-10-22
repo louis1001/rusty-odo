@@ -68,7 +68,7 @@ impl Interpreter {
                 let result = self.interpret(*node)?;
 
                 let symbol = self.semantic_analyzer.current_scope()
-                    .expect("There's always a scope").lookup_id(target_id)
+                    .expect("There's always a scope").symbol_from_id(target_id, &self.semantic_analyzer)
                     .ok_or(anyhow::anyhow!("Symbol not found"))?;
 
                 self.symbol_to_value.insert(symbol.symbol_id, result.value.uuid);

@@ -343,6 +343,18 @@ impl SymbolTable {
             }
         }
     }
+
+    pub fn symbol_from_id<'a>(&'a self, id: SymbolId, semantic_analyzer: &'a SemanticAnalyzer) -> Option<&'a Symbol> {
+        let symbol = self.lookup_id(id);
+
+        if let Some(symbol) = symbol {
+            Some(symbol)
+        } else if let Some(parent) = self.parent_scope(semantic_analyzer) {
+            parent.symbol_from_id(id, semantic_analyzer)
+        } else {
+            None
+        }
+    }
 }
 
 // For report purposes
