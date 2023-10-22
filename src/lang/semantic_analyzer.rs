@@ -65,10 +65,11 @@ pub enum SemanticAst {
     Block(Vec<SemanticAst>, TableId),
     Number(Token),
     Truth(Token),
-    Variable(Token),
+    Variable(SymbolId),
     // It should also store the infered type
     Declaration(Token, Uuid, SemanticNode),
     Assignment(Uuid, SemanticNode),
+    If(SemanticNode, SemanticNode),
     DebugPrint(SemanticNode)
 }
 
@@ -201,16 +202,17 @@ impl SemanticAnalyzer {
                 })
             },
             Ast::Variable(token) => {
-                let node = SemanticAst::Variable(token.clone());
-
                 // lookup the variable and return it's type
-                let symbol = self.current_scope()?.lookup(token.value.clone())
+                let name_node = Ast::Variable(token.clone());
+                let symbol = self.current_scope()?.symbol_from_node(&name_node, self)?
                     .ok_or(anyhow::anyhow!("Variable {} not found", token.value))?;
 
                 let type_id = match symbol.variant {
                     SymbolVariant::Variable(ref var) => var.type_id,
                     _ => panic!("Symbol is not a variable")
                 };
+
+                let node = SemanticAst::Variable(symbol.symbol_id);
 
                 Ok(SemanticResult {
                     node: Box::new(node),
@@ -279,6 +281,25 @@ impl SemanticAnalyzer {
                 }
 
                 let node = SemanticAst::Assignment(target_symbol.symbol_id, result_node.node);
+
+                Ok(SemanticResult {
+                    node: Box::new(node),
+                    type_id: None
+                })
+            },
+            Ast::If(condition, body) => {
+                let condition = self.analyze_node(condition)?;
+                let body = self.analyze_node(body)?;
+
+                // Check that the condition is a truth
+                let condition_type = condition.type_id
+                    .ok_or(anyhow::anyhow!("If condition must be a valid expression (Must return value)"))?;
+
+                if condition_type != TRUTH_TYPE.symbol_id {
+                    return Err(anyhow::anyhow!("If condition must be a truth"));
+                }
+
+                let node = SemanticAst::If(condition.node, body.node);
 
                 Ok(SemanticResult {
                     node: Box::new(node),

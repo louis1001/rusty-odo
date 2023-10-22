@@ -46,8 +46,10 @@ impl Interpreter {
 
                 Ok(ExecutionResult { value: value })
             },
-            SemanticAst::Variable(token) => {
-                let symbol = self.semantic_analyzer.current_scope().expect("There's always a scope").lookup(token.value).ok_or(anyhow::anyhow!("Symbol not found"))?;
+            SemanticAst::Variable(id) => {
+                let symbol = self.semantic_analyzer.current_scope().expect("There's always a scope")
+                    .symbol_from_id(id, &self.semantic_analyzer)
+                    .ok_or(anyhow::anyhow!("Symbol not found"))?;
 
                 let value = self.value_table.get(self.symbol_to_value[&symbol.symbol_id]).ok_or(anyhow::anyhow!("Value not found"))?;
 
@@ -74,6 +76,15 @@ impl Interpreter {
                 self.symbol_to_value.insert(symbol.symbol_id, result.value.uuid);
 
                 self.value_table.insert(result.value); // Updates if it already existed
+
+                Ok(ExecutionResult { value: NO_VALUE.clone() })
+            },
+            SemanticAst::If(condition, body) => {
+                let condition_result = self.interpret(*condition)?;
+
+                if let ValueVariant::Primitive(PrimitiveValue::Bool(true)) = condition_result.value.content {
+                    self.interpret(*body)?;
+                }
 
                 Ok(ExecutionResult { value: NO_VALUE.clone() })
             },

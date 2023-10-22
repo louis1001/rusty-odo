@@ -43,6 +43,10 @@ pub enum Ast {
     Variable(Token),
     Assignment(Node, Node),
     Declaration(Token, Node),
+
+    // Control flow
+    If(Node, Node /*, Option<Node> */),
+
     DebugPrint(Node) // Temporary
 }
 
@@ -165,6 +169,7 @@ impl Parser {
         match self.tokens.peek().unwrap().token_type {
             TokenType::Var => self.parse_declaration(),
             TokenType::LeftCurly => self.parse_block(),
+            TokenType::If => self.parse_if(),
             TokenType::DebugPrint => {
                 self.consume(TokenType::DebugPrint).unwrap();
                 let expr = self.parse_postfix()?;
@@ -250,6 +255,17 @@ impl Parser {
             },
             _ => return Err(anyhow::anyhow!("Unexpected token {:?}", self.tokens.peek().unwrap().token_type))
         }
+    }
+}
+
+// Control flow implementations
+impl Parser {
+    fn parse_if(&mut self) -> anyhow::Result<Node> {
+        let _ = self.consume(TokenType::If)?;
+        let condition = self.parse_postfix()?;
+        let body = self.parse_statement()?;
+
+        Ok(Box::new(Ast::If(condition, body)))
     }
 }
 

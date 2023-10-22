@@ -26,6 +26,9 @@ pub enum TokenType {
     LeftCurly, // {
     RightCurly, // }
 
+    // Control flow
+    If,
+
     DebugPrint // ':' - Temporary
 }
 
@@ -78,6 +81,7 @@ lazy_static! {
         map.insert("var".to_string(), TokenType::Var);
         map.insert("true".to_string(), TokenType::Truth);
         map.insert("false".to_string(), TokenType::Truth);
+        map.insert("if".to_string(), TokenType::If);
         map
     };
 }
