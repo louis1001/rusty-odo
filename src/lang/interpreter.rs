@@ -26,7 +26,7 @@ impl Interpreter {
                 for node in nodes {
                     self.interpret(node)?;
                 }
-                self.semantic_analyzer.pop_scope();
+                self.semantic_analyzer.pop_scope()?;
 
                 Ok(ExecutionResult { value: NO_VALUE.clone() })
             },
@@ -127,7 +127,7 @@ impl Interpreter {
             result = self.interpret(*semantic_result.node)?.value;
         }
 
-        self.semantic_analyzer.pop_scope();
+        self.semantic_analyzer.pop_scope()?;
 
         Ok(ExecutionResult { value: result })
     }

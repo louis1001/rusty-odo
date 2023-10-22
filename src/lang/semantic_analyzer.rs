@@ -39,12 +39,14 @@ impl SemanticAnalyzer {
         }
     }
 
-    pub fn current_scope(&self) -> Option<&SymbolTable> {
+    pub fn current_scope(&self) -> anyhow::Result<&SymbolTable> {
         self.scopes.get(&self.current_scope_id)
+            .ok_or(anyhow::anyhow!("There should always be a scope"))
     }
 
-    fn current_scope_mut(&mut self) -> Option<&mut SymbolTable> {
+    fn current_scope_mut(&mut self) -> anyhow::Result<&mut SymbolTable> {
         self.scopes.get_mut(&self.current_scope_id)
+        .ok_or(anyhow::anyhow!("There should always be a scope"))
     }
 }
 
@@ -175,7 +177,7 @@ impl SemanticAnalyzer {
                 let node = SemanticAst::Block(semantic_nodes, id);
 
                 // Set the current scope to the parent scope
-                self.pop_scope();
+                self.pop_scope()?;
 
                 Ok(SemanticResult {
                     node: Box::new(node),
@@ -202,7 +204,7 @@ impl SemanticAnalyzer {
                 let node = SemanticAst::Variable(token.clone());
 
                 // lookup the variable and return it's type
-                let symbol = self.current_scope().expect("There's always a scope").lookup(token.value.clone())
+                let symbol = self.current_scope()?.lookup(token.value.clone())
                     .ok_or(anyhow::anyhow!("Variable {} not found", token.value))?;
 
                 let type_id = match symbol.variant {
@@ -223,8 +225,7 @@ impl SemanticAnalyzer {
                     .ok_or(anyhow::anyhow!("Variable initialization must be a valid expression (Must return value)"))?;
 
                 // Check if the variable has already been declared
-                if self.current_scope()
-                    .expect("There's always a scope")
+                if self.current_scope()?
                     .symbol_from_node(&Ast::Variable(token.clone()), &self)?
                     .is_some()
                 {
@@ -236,8 +237,7 @@ impl SemanticAnalyzer {
                     type_id: type_id
                 }));
 
-                self.current_scope_mut()
-                    .expect("There's always a scope")
+                self.current_scope_mut()?
                     .symbols.insert(symbol.symbol_id, symbol.clone());
 
                 let node = SemanticAst::Declaration(token, symbol.symbol_id, result_node.node);
@@ -262,14 +262,18 @@ impl SemanticAnalyzer {
 
                 // Check if the type of the assignment is the same as the type of the variable
                 if result_node.type_id.ok_or(anyhow::anyhow!("Assignment must be a valid expression (Must return value)"))? != type_id {
+                    let expected_name = self.name_of_type(type_id)?.unwrap_or("<unknown>".to_string());
+                    let got_name = self.name_of_type(
+                        result_node.type_id
+                            .ok_or(anyhow::anyhow!("Assignment must be a valid expression (Must return value)"))?
+                        )?
+                        .unwrap_or("<unknown>".to_string());
+
                     return Err(
                         anyhow::anyhow!(
                             "Type mismatch: Expected type {:?} but got type {:?}",
-                            self.name_of_type(type_id).unwrap_or("<unknown>".to_string()),
-                            result_node.type_id
-                                .map(|id| self.name_of_type(id))
-                                .unwrap_or(Some("<unknown>".to_string()))
-                                .unwrap_or("<unknown>".to_string()) // FIXME: This is ugly
+                            expected_name,
+                            got_name
                         )
                     );
                 }
@@ -302,10 +306,11 @@ impl SemanticAnalyzer {
         self.current_scope_id = scope_id;
     }
 
-    pub fn pop_scope(&mut self) {
-        self.current_scope_id = self.current_scope()
-            .expect("There's always a scope").parent
+    pub fn pop_scope(&mut self) -> anyhow::Result<()> {
+        self.current_scope_id = self.current_scope()?.parent
             .expect("If you're popping a scope, it must have a parent");
+
+        Ok(())
     }
 }
 
@@ -313,7 +318,7 @@ impl SemanticAnalyzer {
 impl SemanticAnalyzer {
     // Find symbol from node
     fn symbol_from_node(&self, node: &Ast) -> anyhow::Result<Option<&Symbol>> {
-        self.current_scope().expect("There's always a scope")
+        self.current_scope()?
             .symbol_from_node(node, &self)
     }
 }
@@ -342,9 +347,9 @@ impl SymbolTable {
 
 // For report purposes
 impl SemanticAnalyzer {
-    fn name_of_type(&self, id: SymbolId) -> Option<String> {
-        self.current_scope().expect("There's always a scope")
-        .name_of_type(id, &self)
+    fn name_of_type(&self, id: SymbolId) -> anyhow::Result<Option<String>> {
+        Ok(self.current_scope()?
+        .name_of_type(id, &self))
     }
 }
 
