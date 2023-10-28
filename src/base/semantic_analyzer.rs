@@ -82,6 +82,7 @@ pub enum SemanticAst {
     // It should also store the infered type
     Declaration(SymbolId, Uuid, SemanticNode),
     Assignment(SymbolId, SemanticNode),
+    FunctionCall(SemanticNode, Vec<SemanticNode>),
     If(SemanticNode, SemanticNode),
     DebugPrint(SemanticNode)
 }
@@ -368,6 +369,56 @@ impl SemanticAnalyzer {
                 Ok(SemanticResult {
                     node: Box::new(node),
                     type_id: None
+                })
+            },
+            Ast::FunctionCall(callee, args) => {
+                let callee_result = self.analyze_node(callee)?;
+                let callee_variant = &self.current_scope()?
+                    .symbol_from_id(callee_result.type_id.ok_or(anyhow::anyhow!(""))?, &self)
+                    .ok_or(anyhow::anyhow!("Symbol not found"))?
+                    .variant;
+
+                let callee_type = match callee_variant {
+                    SymbolVariant::FunctionType(ref func) => func.clone(),
+                    _ => panic!("Symbol is not a function")
+                };
+
+                // Check that the number of arguments is correct
+                if args.len() != callee_type.argument_ids.len() {
+                    return Err(anyhow::anyhow!("Incorrect number of arguments"));
+                }
+
+                let mut arg_nodes = vec![];
+
+                // Check that the types of the arguments are correct
+                for (i, arg) in args.clone().iter().enumerate() {
+                    let arg_result = self.analyze_node(arg.clone())?;
+                    arg_nodes.push(arg_result.node);
+                    let arg_type_id = arg_result.type_id
+                        .ok_or(anyhow::anyhow!("Function argument must be a valid expression (Must return value)"))?;
+
+                    if arg_type_id != callee_type.argument_ids[i] {
+                        let expected_name = self.name_of_type(callee_type.argument_ids[i])?.unwrap_or("<unknown>".to_string());
+                        let got_name = self.name_of_type(arg_type_id)?.unwrap_or("<unknown>".to_string());
+
+                        return Err(
+                            anyhow::anyhow!(
+                                "Type mismatch: Expected type {:?} but got type {:?}",
+                                expected_name,
+                                got_name
+                            )
+                        );
+                    }
+                }
+
+                let node = SemanticAst::FunctionCall(
+                    callee_result.node,
+                    arg_nodes
+                );
+
+                Ok(SemanticResult {
+                    node: Box::new(node),
+                    type_id: callee_type.return_id
                 })
             },
             Ast::If(condition, body) => {

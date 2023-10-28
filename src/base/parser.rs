@@ -45,6 +45,8 @@ pub enum Ast {
     Assignment(Node, Node),
     Declaration(Token, Node),
 
+    FunctionCall(Node, Vec<Node>),
+
     // Control flow
     If(Node, Node /*, Option<Node> */),
 
@@ -70,6 +72,13 @@ impl Parser {
         } else {
             Err(Error::UnexpectedToken(kind.clone(), current_token.clone()))
                 .context(format!("Expected token of type {:?} but got {:?}", kind, current_token))
+        }
+    }
+
+    fn next_is(&mut self, kind: TokenType) -> bool {
+        match self.tokens.peek() {
+            Some(token) => token.token_type == kind,
+            None => false
         }
     }
 
@@ -222,6 +231,33 @@ impl Parser {
         Ok(Box::new(Ast::Assignment(target_node, expr)))
     }
 
+    fn parse_function_call(&mut self, callee: Node) -> anyhow::Result<Node> {
+        self.ignore_newline();
+        let _ = self.consume(TokenType::LeftParen)?;
+        self.ignore_newline();
+
+        let mut args = Vec::new();
+
+        loop {
+            match self.tokens.peek() {
+                Some(token) if token.token_type == TokenType::RightParen => break,
+                Some(_) => {},
+                None => break,
+            };
+            
+            args.push(self.parse_postfix()?);
+
+            self.ignore_newline();
+
+            if self.next_is(TokenType ::Comma) { self.consume(TokenType::Comma)?; }
+            else { break; }
+        }
+
+        let _ = self.consume(TokenType::RightParen)?;
+
+        Ok(Box::new(Ast::FunctionCall(callee, args)))
+    }
+
     fn parse_postfix(&mut self) -> anyhow::Result<Node> {
         let mut expr = self.parse_factor()?;
 
@@ -232,6 +268,9 @@ impl Parser {
                 TokenType::Assign => {
                     expr = self.parse_assignment(expr)?;
                 },
+                TokenType::LeftParen => {
+                    expr = self.parse_function_call(expr)?;
+                }
                 _ => break
             }
         }

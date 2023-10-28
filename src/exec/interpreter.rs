@@ -1,6 +1,6 @@
 use uuid::Uuid;
 use std::collections::HashMap;
-use super::value::{ValueTable, Value, PrimitiveValue, ValueVariant};
+use super::value::{ValueTable, Value, PrimitiveValue, ValueVariant, FunctionValue};
 
 use crate::base::{semantic_analyzer::{SemanticAnalyzer, SemanticAst}, lexer::Lexer, parser::Parser};
 
@@ -86,6 +86,30 @@ impl<'a> Interpreter<'a> {
                 self.value_table.insert(value); // Updates if it already existed
 
                 Ok(ExecutionResult { value: None })
+            },
+            SemanticAst::FunctionCall(callee, args) => {
+                let callee_result = self.interpret(*callee)?;
+                let callee_value = callee_result.value.expect("Semantic analysis error. Should have value");
+
+                let callee_function = match callee_value.content {
+                    ValueVariant::Function(f) => f,
+                    _ => panic!("Semantic error. Should have been a function")
+                };
+
+                match callee_function {
+                    FunctionValue::Native(f) => {
+                        let mut arg_values = Vec::new();
+                        for arg in args {
+                            let arg_result = self.interpret(*arg)?;
+                            let arg_value = arg_result.value.expect("Semantic analysis error. Should have value");
+                            arg_values.push(arg_value);
+                        }
+
+                        let result = f(arg_values);
+
+                        Ok(ExecutionResult { value: result })
+                    }
+                }
             },
             SemanticAst::If(condition, body) => {
                 let condition_result = self.interpret(*condition)?;

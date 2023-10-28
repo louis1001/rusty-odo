@@ -24,9 +24,12 @@ pub enum TokenType {
     NewLine, // \n
 
     SemiColon, // ;
+    Comma, // ,
 
     LeftCurly, // {
     RightCurly, // }
+    LeftParen, // (
+    RightParen, // )
 
     // Control flow
     If,
@@ -157,6 +160,14 @@ impl Iterator for Lexer {
                 self.advance();
             } else if curr == '}' {
                 token.token_type = TokenType::RightCurly;
+                token.value.push(curr);
+                self.advance();
+            } else if curr == '(' {
+                token.token_type = TokenType::LeftParen;
+                token.value.push(curr);
+                self.advance();
+            } else if curr == ')' {
+                token.token_type = TokenType::RightParen;
                 token.value.push(curr);
                 self.advance();
             } else if curr == ';' {
