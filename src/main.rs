@@ -32,7 +32,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 mod repl {
-    use odo::exec::interpreter::Interpreter;
+    use odo::{exec::interpreter::Interpreter, native::function::NativeFunctionBindable};
     use std::io::Write;
 
     pub fn print_logo() {
@@ -62,6 +62,10 @@ mod repl {
         // It keeps context through the repl, so it's just one for all loops.
         let mut interpreter = Interpreter::new();
 
+        interpreter.bind_void_function("hello", |_| {
+            println!("Hello, world!");
+        })?;
+
         loop {
             print!("> ");
             let mut input = String::new();
@@ -80,10 +84,9 @@ mod repl {
                     continue;
                 }
             };
-    
-            match result.value.content {
-                odo::exec::value::ValueVariant::Nothing => {},
-                _ => println!("{:#?}", result.value.content)
+
+            if let Some(value) = result.value {
+                println!("{:#?}", value.content);
             }
         }
 

@@ -9,7 +9,8 @@ use super::{parser::Node, lexer::Token};
 pub struct SemanticAnalyzer {
     scopes: HashMap<Uuid, SymbolTable>,
     pub current_scope_id: TableId,
-    pub repl_scope_id: TableId
+    pub repl_scope_id: TableId,
+    global_scope_id: TableId
 }
 
 impl SemanticAnalyzer {
@@ -35,8 +36,19 @@ impl SemanticAnalyzer {
                 map
             },
             current_scope_id: id,
-            repl_scope_id
+            repl_scope_id,
+            global_scope_id: id
         }
+    }
+
+    pub fn global_scope(&self) -> anyhow::Result<&SymbolTable> {
+        self.scopes.get(&self.global_scope_id)
+            .ok_or(anyhow::anyhow!("There should always be a global scope"))
+    }
+
+    pub fn global_scope_mut(&mut self) -> anyhow::Result<&mut SymbolTable> {
+        self.scopes.get_mut(&self.global_scope_id)
+            .ok_or(anyhow::anyhow!("There should always be a global scope"))
     }
 
     pub fn current_scope(&self) -> anyhow::Result<&SymbolTable> {
@@ -44,7 +56,7 @@ impl SemanticAnalyzer {
             .ok_or(anyhow::anyhow!("There should always be a scope"))
     }
 
-    fn current_scope_mut(&mut self) -> anyhow::Result<&mut SymbolTable> {
+    pub fn current_scope_mut(&mut self) -> anyhow::Result<&mut SymbolTable> {
         self.scopes.get_mut(&self.current_scope_id)
         .ok_or(anyhow::anyhow!("There should always be a scope"))
     }
@@ -77,6 +89,7 @@ pub enum SemanticAst {
 type TableId = Uuid;
 
 pub struct SymbolTable {
+    #[allow(dead_code)]
     name: String,
     table_id: TableId,
     parent: Option<TableId>,
@@ -91,6 +104,10 @@ impl SymbolTable {
             parent: None,
             symbols: HashMap::new()
         }
+    }
+
+    pub fn insert(&mut self, symbol: Symbol) {
+        self.symbols.insert(symbol.symbol_id, symbol);
     }
 
     // Lookup by name
@@ -131,14 +148,70 @@ impl Symbol {
 
 #[derive(Clone, Debug)]
 pub enum SymbolVariant {
-    Variable(Variable),
-    Primitive // Primitives only need their name
+    Variable(VariableSymbol),
+    Primitive, // Primitives only need their name
+    FunctionType(FunctionTypeSymbol),
+    NativeFunction(NativeFunctionSymbol)
 }
 
 // Symbol variants:
 #[derive(Clone, Debug)]
-pub struct Variable {
+pub struct VariableSymbol {
     type_id: SymbolId
+}
+
+#[derive(Clone, Debug)]
+pub struct FunctionTypeSymbol {
+    return_id: Option<SymbolId>,
+    argument_ids: Vec<SymbolId>
+}
+
+impl FunctionTypeSymbol {
+    pub fn new(return_id: Option<SymbolId>, argument_ids: Vec<SymbolId>) -> Self {
+        FunctionTypeSymbol {
+            return_id,
+            argument_ids
+        }
+    }
+
+    pub fn construct_type_name(return_id: Option<SymbolId>, argument_ids: Vec<SymbolId>, semantic_analyzer: &SemanticAnalyzer) -> anyhow::Result<String> {
+        // Format for a function type name:
+        // <arg1,arg2,...,argn:return>
+        // <arg1:return>
+        // <:return>
+        // <arg1:>
+        // <:>
+
+        let mut name = "<".to_string();
+
+        let mut counter = 0;
+        for arg_id in &argument_ids {
+            let arg_name = semantic_analyzer.name_of_type(*arg_id)?.unwrap_or("<unknown>".to_string());
+            name.push_str(&arg_name);
+
+            counter += 1;
+            if counter < argument_ids.len() {
+                name.push(',');
+            }
+        }
+
+        name.push('>');
+
+        Ok(name)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct NativeFunctionSymbol {
+    type_id: SymbolId
+}
+
+impl NativeFunctionSymbol {
+    pub fn new(type_id: SymbolId) -> Self {
+        NativeFunctionSymbol {
+            type_id
+        }
+    }
 }
 
 // Semantic analysis
@@ -218,7 +291,8 @@ impl SemanticAnalyzer {
 
                 let type_id = match symbol.variant {
                     SymbolVariant::Variable(ref var) => var.type_id,
-                    _ => panic!("Symbol is not a variable")
+                    SymbolVariant::NativeFunction(ref func) => func.type_id,
+                    _ => panic!("Symbol does not contain a value")
                 };
 
                 let node = SemanticAst::Variable(symbol.symbol_id);
@@ -244,7 +318,7 @@ impl SemanticAnalyzer {
                 }
 
                 // Create a new symbol and insert it into the symbol table
-                let symbol = Symbol::new(token.value.clone(), SymbolVariant::Variable(Variable {
+                let symbol = Symbol::new(token.value.clone(), SymbolVariant::Variable(VariableSymbol {
                     type_id: type_id
                 }));
 
